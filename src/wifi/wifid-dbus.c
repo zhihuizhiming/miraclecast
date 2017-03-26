@@ -261,12 +261,12 @@ static const sd_bus_vtable peer_dbus_vtable[] = {
 		      "ss",
 		      NULL,
 		      peer_dbus_connect,
-		      0),
+		      SD_BUS_VTABLE_UNPRIVILEGED),
 	SD_BUS_METHOD("Disconnect",
 		      NULL,
 		      NULL,
 		      peer_dbus_disconnect,
-		      0),
+		      SD_BUS_VTABLE_UNPRIVILEGED),
 	SD_BUS_PROPERTY("Link",
 			"o",
 			peer_dbus_get_link,
@@ -512,6 +512,24 @@ static int link_dbus_get_interface_index(sd_bus *bus,
 	return 1;
 }
 
+static int link_dbus_get_mac_addr(sd_bus *bus,
+					const char *path,
+					const char *interface,
+					const char *property,
+					sd_bus_message *reply,
+					void *data,
+					sd_bus_error *err)
+{
+	struct link *l = data;
+	int r;
+
+	r = sd_bus_message_append_basic(reply, 's', l->mac_addr);
+	if (r < 0)
+		return r;
+
+	return 1;
+}
+
 static int link_dbus_get_interface_name(sd_bus *bus,
 					const char *path,
 					const char *interface,
@@ -568,6 +586,48 @@ static int link_dbus_set_friendly_name(sd_bus *bus,
 		return -EINVAL;
 
 	return link_set_friendly_name(l, name);
+}
+
+static int link_dbus_get_managed(sd_bus *bus,
+				      const char *path,
+				      const char *interface,
+				      const char *property,
+				      sd_bus_message *reply,
+				      void *data,
+				      sd_bus_error *err)
+{
+	struct link *l = data;
+	int r;
+
+	r = sd_bus_message_append(reply, "b", link_get_managed(l));
+	if (r < 0)
+		return r;
+
+	return 1;
+}
+
+static int link_dbus_manage(sd_bus_message *msg,
+				void *data,
+				sd_bus_error *err)
+{
+	struct link *l = data;
+	int r = link_set_managed(l, true);
+	if(r < 0)
+		return r;
+
+	return sd_bus_reply_method_return(msg, NULL);
+}
+
+static int link_dbus_unmanage(sd_bus_message *msg,
+				void *data,
+				sd_bus_error *err)
+{
+	struct link *l = data;
+	int r = link_set_managed(l, false);
+	if(r < 0)
+		return r;
+
+	return sd_bus_reply_method_return(msg, NULL);
 }
 
 static int link_dbus_get_p2p_scanning(sd_bus *bus,
@@ -645,9 +705,24 @@ static int link_dbus_set_wfd_subelements(sd_bus *bus,
 
 static const sd_bus_vtable link_dbus_vtable[] = {
 	SD_BUS_VTABLE_START(0),
+	SD_BUS_METHOD("Manage",
+		      NULL,
+		      NULL,
+		      link_dbus_manage,
+		      SD_BUS_VTABLE_UNPRIVILEGED),
+	SD_BUS_METHOD("Unmanage",
+		      NULL,
+		      NULL,
+		      link_dbus_unmanage,
+		      SD_BUS_VTABLE_UNPRIVILEGED),
 	SD_BUS_PROPERTY("InterfaceIndex",
 			"u",
 			link_dbus_get_interface_index,
+			0,
+			SD_BUS_VTABLE_PROPERTY_CONST),
+	SD_BUS_PROPERTY("MACAddress",
+			"s",
+			link_dbus_get_mac_addr,
 			0,
 			SD_BUS_VTABLE_PROPERTY_CONST),
 	SD_BUS_PROPERTY("InterfaceName",
@@ -660,19 +735,24 @@ static const sd_bus_vtable link_dbus_vtable[] = {
 				 link_dbus_get_friendly_name,
 				 link_dbus_set_friendly_name,
 				 0,
+				 SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE | SD_BUS_VTABLE_UNPRIVILEGED),
+	SD_BUS_PROPERTY("Managed",
+				 "b",
+				 link_dbus_get_managed,
+				 0,
 				 SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
 	SD_BUS_WRITABLE_PROPERTY("P2PScanning",
 				 "b",
 				 link_dbus_get_p2p_scanning,
 				 link_dbus_set_p2p_scanning,
 				 0,
-				 SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+				 SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE | SD_BUS_VTABLE_UNPRIVILEGED),
 	SD_BUS_WRITABLE_PROPERTY("WfdSubelements",
 				 "s",
 				 link_dbus_get_wfd_subelements,
 				 link_dbus_set_wfd_subelements,
 				 0,
-				 SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+				 SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE | SD_BUS_VTABLE_UNPRIVILEGED),
 	SD_BUS_VTABLE_END
 };
 
@@ -786,14 +866,17 @@ static int manager_dbus_enumerate(sd_bus *bus,
 	struct peer *p;
 	size_t i, peer_cnt;
 	char **nodes, *node;
-	int r;
+
+    if(strcmp("/org/freedesktop/miracle/wifi", path)) {
+        return 0;
+    }
 
 	peer_cnt = 0;
 	MANAGER_FOREACH_LINK(l, m)
 		if (l->public)
 			peer_cnt += l->peer_cnt;
 
-	nodes = malloc(sizeof(*nodes) * (m->link_cnt + peer_cnt + 2));
+	nodes = malloc(sizeof(*nodes) * (m->link_cnt + peer_cnt + 1));
 	if (!nodes)
 		return log_ENOMEM();
 
@@ -832,13 +915,6 @@ static int manager_dbus_enumerate(sd_bus *bus,
 		}
 	}
 
-	node = strdup("/org/freedesktop/miracle/wifi");
-	if (!node) {
-		r = log_ENOMEM();
-		goto error;
-	}
-
-	nodes[i++] = node;
 	nodes[i] = NULL;
 	*out = nodes;
 
@@ -848,7 +924,7 @@ error:
 	while (i--)
 		free(nodes[i]);
 	free(nodes);
-	return r;
+	return log_ENOMEM();
 }
 
 int manager_dbus_connect(struct manager *m)

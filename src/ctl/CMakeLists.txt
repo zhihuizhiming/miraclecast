@@ -1,11 +1,10 @@
-
-find_package(Readline)
+find_package(Readline REQUIRED)
 ########### next target ###############
 
 set(miracle-wifictl_SRCS ctl.h 
-                         ctl-cli.c 
-                         ctl-wifi.c 
-                         wifictl.c)
+						 ctl-cli.c 
+						 ctl-wifi.c 
+						 wifictl.c)
 
 add_executable(miracle-wifictl ${miracle-wifictl_SRCS})
 
@@ -23,12 +22,12 @@ target_link_libraries(miracle-wifictl miracle-shared)
 ########### next target ###############
 
 set(miracle-sinkctl_SRCS ctl.h 
-                         ctl-cli.c 
-                         ctl-sink.h
-                         ctl-sink.c 
-                         ctl-wifi.c 
-                         sinkctl.c
-                         wfd.c)
+						 ctl-cli.c 
+						 ctl-sink.h
+						 ctl-sink.c 
+						 ctl-wifi.c 
+						 sinkctl.c
+						 wfd.c)
 
 add_executable(miracle-sinkctl ${miracle-sinkctl_SRCS})
 
@@ -44,12 +43,8 @@ endif(READLINE_FOUND)
 
 target_link_libraries(miracle-sinkctl miracle-shared)
 
-INCLUDE_DIRECTORIES(${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/shared)
-
-########### install files ###############
-
-
-
+include_directories(${CMAKE_BINARY_DIR}
+         ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/shared)
 
 #original Makefile.am contents follow:
 
@@ -84,3 +79,4 @@ INCLUDE_DIRECTORIES(${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_D
 #	$(DEPS_LIBS)
 #
 #
+
