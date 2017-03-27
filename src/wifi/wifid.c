@@ -39,6 +39,7 @@
 #include "util.h"
 #include "wifid.h"
 #include "config.h"
+#include <glib.h>
 
 const char *interface_name = NULL;
 unsigned int arg_wpa_loglevel = LOG_NOTICE;
@@ -540,8 +541,32 @@ int main(int argc, char **argv)
 {
 	struct manager *m = NULL;
 	int r;
+   GKeyFile* gkf;
+   gchar* config_file;
 
 	srand(time(NULL));
+
+   gkf = g_key_file_new();
+   
+   config_file = g_build_filename(g_get_home_dir(), "config", "miraclecastrc", NULL);
+   if (!g_key_file_load_from_file(gkf, config_file, G_KEY_FILE_NONE, NULL)) {
+      g_free(config_file);
+      config_file = g_build_filename(g_get_home_dir(), ".miraclecast", NULL);
+      if (!g_key_file_load_from_file(gkf, config_file, G_KEY_FILE_NONE, NULL)) {
+         g_key_file_free(gkf);
+         gkf = NULL;
+      }
+   }
+   g_free(config_file);
+   if (gkf) {
+      gchar* log_level;
+      log_level = g_key_file_get_string (gkf, "wifid", "log-level", NULL);
+      if (log_level) {
+         log_max_sev = log_parse_arg(log_level);
+      }
+      g_key_file_free(gkf);
+   }
+
 
 	r = parse_argv(argc, argv);
 	if (r < 0)
